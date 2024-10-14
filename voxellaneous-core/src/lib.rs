@@ -86,7 +86,7 @@ impl Renderer {
             height: canvas_height,
             present_mode: wgpu::PresentMode::Fifo,
             alpha_mode: wgpu::CompositeAlphaMode::Auto,
-            desired_maximum_frame_latency: 1,
+            desired_maximum_frame_latency: 2,
             view_formats: vec![],
         };
         surface.configure(&device, &surface_config);

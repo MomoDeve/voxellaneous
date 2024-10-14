@@ -17,6 +17,7 @@ const MAX_POSITION_BUFFER_SIZE: usize = 32 * 3 * 1024 * 1024;
 fn create_depth_texture(
     device: &wgpu::Device,
     config: &wgpu::SurfaceConfiguration,
+    sample_count: u32,
 ) -> wgpu::TextureView {
     let size = wgpu::Extent3d {
         width: config.width,
@@ -28,7 +29,7 @@ fn create_depth_texture(
         label: Some("Depth Texture"),
         size,
         mip_level_count: 1,
-        sample_count: 1,
+        sample_count: sample_count,
         dimension: wgpu::TextureDimension::D2,
         format: wgpu::TextureFormat::Depth24PlusStencil8, // Depth format
         usage: wgpu::TextureUsages::RENDER_ATTACHMENT,    // Used as a render target
@@ -36,6 +37,31 @@ fn create_depth_texture(
     });
 
     depth_texture.create_view(&wgpu::TextureViewDescriptor::default())
+}
+
+fn create_miltisample_texture(
+    device: &wgpu::Device,
+    config: &wgpu::SurfaceConfiguration,
+    sample_count: u32,
+) -> wgpu::TextureView {
+    let size = wgpu::Extent3d {
+        width: config.width,
+        height: config.height,
+        depth_or_array_layers: 1,
+    };
+
+    let multisample_texture = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("Multisample Texture"),
+        size,
+        mip_level_count: 1,
+        sample_count,
+        dimension: wgpu::TextureDimension::D2,
+        format: config.format,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+        view_formats: &[],
+    });
+
+    multisample_texture.create_view(&wgpu::TextureViewDescriptor::default())
 }
 
 #[wasm_bindgen]
@@ -50,7 +76,9 @@ pub struct Renderer {
     position_buffer: wgpu::Buffer,
     uniform_buffer: wgpu::Buffer,
     bind_group: wgpu::BindGroup,
+    multisample_texture_view: wgpu::TextureView,
     depth_texture_view: wgpu::TextureView,
+    sample_count: u32,
     map_size: usize,
 }
 
@@ -62,6 +90,7 @@ impl Renderer {
 
         let canvas_width = html_canvas.width();
         let canvas_height = html_canvas.height();
+        let sample_count = 4;
 
         let surface_target = wgpu::SurfaceTarget::Canvas(html_canvas);
         let surface = instance
@@ -204,14 +233,18 @@ impl Renderer {
                 bias: wgpu::DepthBiasState::default(),
             }),
             primitive: wgpu::PrimitiveState::default(),
-            multisample: wgpu::MultisampleState::default(),
+            multisample: wgpu::MultisampleState {
+                count: sample_count,
+                mask: !0,
+                alpha_to_coverage_enabled: false,
+            },
             multiview: None,
             cache: None,
         });
 
-        let depth_texture_view = create_depth_texture(&device, &surface_config);
-
-        let map_size = 0;
+        let multisample_texture_view =
+            create_miltisample_texture(&device, &surface_config, sample_count);
+        let depth_texture_view = create_depth_texture(&device, &surface_config, sample_count);
 
         Ok(Renderer {
             device,
@@ -223,9 +256,11 @@ impl Renderer {
             uniform_buffer,
             position_buffer,
             bind_group,
+            sample_count,
+            multisample_texture_view,
             depth_texture_view,
             surface_config,
-            map_size,
+            map_size: 0,
         })
     }
 
@@ -233,7 +268,10 @@ impl Renderer {
         self.surface_config.width = width;
         self.surface_config.height = height;
         self.surface.configure(&self.device, &self.surface_config);
-        self.depth_texture_view = create_depth_texture(&self.device, &self.surface_config);
+        self.multisample_texture_view =
+            create_miltisample_texture(&self.device, &self.surface_config, self.sample_count);
+        self.depth_texture_view =
+            create_depth_texture(&self.device, &self.surface_config, self.sample_count);
         Ok(())
     }
 
@@ -263,13 +301,20 @@ impl Renderer {
 
         // Begin render pass
         if self.map_size > 0 {
+            let clear_color = wgpu::Color {
+                r: 0.53,
+                g: 0.81,
+                b: 0.92,
+                a: 1.0,
+            };
+
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Render Pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
-                    resolve_target: None,
+                    view: &self.multisample_texture_view,
+                    resolve_target: Some(&view),
                     ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                        load: wgpu::LoadOp::Clear(clear_color),
                         store: wgpu::StoreOp::Store,
                     },
                 })],
@@ -277,7 +322,7 @@ impl Renderer {
                     view: &self.depth_texture_view,
                     depth_ops: Some(wgpu::Operations {
                         load: wgpu::LoadOp::Clear(1.0),
-                        store: wgpu::StoreOp::Store,
+                        store: wgpu::StoreOp::Discard,
                     }),
                     stencil_ops: None,
                 }),

@@ -1,4 +1,5 @@
 import { CameraModule } from './camera';
+import { generateTerrainMap } from './map';
 import './style.css'
 
 import init, { Renderer } from 'voxellaneous-core';
@@ -35,7 +36,10 @@ async function initializeApp(): Promise<AppData> {
   
   await init({});
   const renderer = await Renderer.new(canvas);
+
   const cameraModule = new CameraModule(canvas);
+  cameraModule.camera.position = [10, 5, -10];
+
   const { autoresizeCanvas } = initializeCanvasAutoresize(canvas);
   
   const render = () => {
@@ -49,6 +53,7 @@ async function initializeApp(): Promise<AppData> {
   }
   requestAnimationFrame(render);
   
+  renderer.upload_map(new Float32Array(generateTerrainMap()));
   
   return { renderer, canvas }
 }

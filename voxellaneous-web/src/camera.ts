@@ -8,7 +8,7 @@ export class CameraModule {
     private keysPressedState: { [key: KeyboardEvent['code']]: boolean } = { };
 
     camera = {
-        position: [0, 0, -5] as vec3,
+        position: [0, 0, 0] as vec3,
         direction: [0, 0, 1] as vec3,
         right: [-1, 0, 0] as vec3,
         up: [0, 1, 0] as vec3,

@@ -1,5 +1,7 @@
+mod constants;
 mod utils;
 
+use constants::{Vertex, CUBE_INDICES, CUBE_VERTICES};
 use utils::map_wgpu_err;
 use wasm_bindgen::prelude::*;
 use wgpu::util::DeviceExt;
@@ -9,6 +11,8 @@ use wgpu::util::DeviceExt;
 struct Uniforms {
     mvp_matrix: [f32; 16],
 }
+
+const MAX_POSITION_BUFFER_SIZE: usize = 32 * 3 * 1024 * 1024;
 
 fn create_depth_texture(
     device: &wgpu::Device,
@@ -43,9 +47,11 @@ pub struct Renderer {
     render_pipeline: wgpu::RenderPipeline,
     vertex_buffer: wgpu::Buffer,
     index_buffer: wgpu::Buffer,
+    position_buffer: wgpu::Buffer,
     uniform_buffer: wgpu::Buffer,
-    uniform_bind_group: wgpu::BindGroup,
+    bind_group: wgpu::BindGroup,
     depth_texture_view: wgpu::TextureView,
+    map_size: usize,
 }
 
 #[wasm_bindgen]
@@ -96,60 +102,15 @@ impl Renderer {
             source: wgpu::ShaderSource::Wgsl(include_str!("shaders/shader.wgsl").into()),
         });
 
-        #[repr(C)]
-        #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
-        struct Vertex {
-            position: [f32; 3],
-            color: [f32; 3],
-        }
-
-        const VERTICES: &[Vertex] = &[
-            Vertex {
-                position: [-1.0, -1.0, 1.0],
-                color: [1.0, 0.0, 0.0],
-            },
-            Vertex {
-                position: [1.0, -1.0, 1.0],
-                color: [0.0, 1.0, 0.0],
-            },
-            Vertex {
-                position: [1.0, 1.0, 1.0],
-                color: [0.0, 0.0, 1.0],
-            },
-            Vertex {
-                position: [-1.0, 1.0, 1.0],
-                color: [1.0, 1.0, 0.0],
-            },
-            Vertex {
-                position: [-1.0, -1.0, -1.0],
-                color: [1.0, 0.0, 1.0],
-            },
-            Vertex {
-                position: [1.0, -1.0, -1.0],
-                color: [0.0, 1.0, 1.0],
-            },
-            Vertex {
-                position: [1.0, 1.0, -1.0],
-                color: [1.0, 1.0, 1.0],
-            },
-            Vertex {
-                position: [-1.0, 1.0, -1.0],
-                color: [0.5, 0.5, 0.5],
-            },
-        ];
         let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Vertex Buffer"),
-            contents: bytemuck::cast_slice(VERTICES),
+            contents: bytemuck::cast_slice(CUBE_VERTICES),
             usage: wgpu::BufferUsages::VERTEX,
         });
 
-        const INDICES: &[u16] = &[
-            0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7, 4, 0, 3, 4, 3, 7, 1, 5, 6, 1, 6, 2, 3, 2, 6, 3, 6,
-            7, 4, 5, 1, 4, 1, 0,
-        ];
         let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Index Buffer"),
-            contents: bytemuck::cast_slice(INDICES),
+            contents: bytemuck::cast_slice(CUBE_INDICES),
             usage: wgpu::BufferUsages::INDEX,
         });
 
@@ -159,10 +120,16 @@ impl Renderer {
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
 
-        let uniform_bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("Uniform Bind Group Layout"),
-                entries: &[wgpu::BindGroupLayoutEntry {
+        let position_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Position Buffer"),
+            contents: &[0; MAX_POSITION_BUFFER_SIZE],
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+        });
+
+        let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("Bind Group Layout"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
                     binding: 0,
                     visibility: wgpu::ShaderStages::VERTEX,
                     ty: wgpu::BindingType::Buffer {
@@ -171,21 +138,38 @@ impl Renderer {
                         min_binding_size: None,
                     },
                     count: None,
-                }],
-            });
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::VERTEX,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: true },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+            ],
+        });
 
-        let uniform_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &uniform_bind_group_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: uniform_buffer.as_entire_binding(),
-            }],
-            label: Some("Uniform Bind Group"),
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: uniform_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: position_buffer.as_entire_binding(),
+                },
+            ],
+            label: Some("Bind Group"),
         });
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Pipeline Layout"),
-            bind_group_layouts: &[&uniform_bind_group_layout],
+            bind_group_layouts: &[&bind_group_layout],
             push_constant_ranges: &[],
         });
 
@@ -198,7 +182,7 @@ impl Renderer {
                 buffers: &[wgpu::VertexBufferLayout {
                     array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
                     step_mode: wgpu::VertexStepMode::Vertex,
-                    attributes: &wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3],
+                    attributes: &wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x2],
                 }],
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
             },
@@ -227,6 +211,8 @@ impl Renderer {
 
         let depth_texture_view = create_depth_texture(&device, &surface_config);
 
+        let map_size = 0;
+
         Ok(Renderer {
             device,
             queue,
@@ -235,9 +221,11 @@ impl Renderer {
             vertex_buffer,
             index_buffer,
             uniform_buffer,
-            uniform_bind_group,
+            position_buffer,
+            bind_group,
             depth_texture_view,
             surface_config,
+            map_size,
         })
     }
 
@@ -274,7 +262,7 @@ impl Renderer {
             });
 
         // Begin render pass
-        {
+        if self.map_size > 0 {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Render Pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -299,16 +287,25 @@ impl Renderer {
 
             // Bind pipeline, vertex buffer, index buffer, and uniforms
             render_pass.set_pipeline(&self.render_pipeline);
-            render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
+            render_pass.set_bind_group(0, &self.bind_group, &[]);
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
             render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
-            render_pass.draw_indexed(0..36, 0, 0..1);
+
+            render_pass.draw_indexed(0..36, 0, 0..self.map_size as u32);
         }
 
         // Submit the commands to the GPU
         self.queue.submit(Some(encoder.finish()));
         frame.present();
 
+        Ok(())
+    }
+
+    pub fn upload_map(&mut self, map: Vec<f32>) -> Result<(), JsValue> {
+        assert_eq!(map.len() % 4, 0); // verify vec4 alignment
+        self.queue
+            .write_buffer(&self.position_buffer, 0, bytemuck::cast_slice(&map));
+        self.map_size = map.len() / 4;
         Ok(())
     }
 }

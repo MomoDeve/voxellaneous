@@ -1,3 +1,4 @@
+import { vec4 } from 'gl-matrix';
 import { CameraModule } from './camera';
 import { generateTerrainMap } from './map';
 import './style.css'
@@ -54,6 +55,19 @@ async function initializeApp(): Promise<AppData> {
   requestAnimationFrame(render);
   
   renderer.upload_map(new Float32Array(generateTerrainMap()));
+
+  const colors: vec4[] = [
+    [0.13, 0.55, 0.13, 1.0], 
+    [0.18, 0.60, 0.44, 1.0], 
+    [0.24, 0.70, 0.44, 1.0],  
+    [0.18, 0.58, 0.10, 1.0],  
+    [0.34, 0.78, 0.34, 1.0], 
+    [0.26, 0.63, 0.06, 1.0], 
+    [0.19, 0.60, 0.19, 1.0],  
+    [0.13, 0.54, 0.13, 1.0],  
+  ];
+  renderer.upload_materials(new Float32Array(colors.flat() as number[]));
+    
   
   return { renderer, canvas }
 }

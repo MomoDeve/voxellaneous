@@ -6,13 +6,15 @@ use utils::map_wgpu_err;
 use wasm_bindgen::prelude::*;
 use wgpu::util::DeviceExt;
 
+const MAX_INSTANCE_BUFFER_SIZE: usize = 32 * 4 * 1024 * 1024;
+const MAX_MATERIAL_COUNT: usize = 128;
+
 #[repr(C, align(16))]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 struct Uniforms {
     mvp_matrix: [f32; 16],
+    material_colors: [[f32; 4]; MAX_MATERIAL_COUNT],
 }
-
-const MAX_POSITION_BUFFER_SIZE: usize = 32 * 3 * 1024 * 1024;
 
 fn create_depth_texture(
     device: &wgpu::Device,
@@ -73,13 +75,15 @@ pub struct Renderer {
     render_pipeline: wgpu::RenderPipeline,
     vertex_buffer: wgpu::Buffer,
     index_buffer: wgpu::Buffer,
-    position_buffer: wgpu::Buffer,
+    instance_buffer: wgpu::Buffer,
     uniform_buffer: wgpu::Buffer,
     bind_group: wgpu::BindGroup,
     multisample_texture_view: wgpu::TextureView,
     depth_texture_view: wgpu::TextureView,
     sample_count: u32,
+
     map_size: usize,
+    material_colors: Vec<[f32; 4]>,
 }
 
 #[wasm_bindgen]
@@ -149,9 +153,9 @@ impl Renderer {
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
 
-        let position_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        let instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Position Buffer"),
-            contents: &[0; MAX_POSITION_BUFFER_SIZE],
+            contents: &[0; MAX_INSTANCE_BUFFER_SIZE],
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
         });
 
@@ -190,7 +194,7 @@ impl Renderer {
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
-                    resource: position_buffer.as_entire_binding(),
+                    resource: instance_buffer.as_entire_binding(),
                 },
             ],
             label: Some("Bind Group"),
@@ -254,13 +258,14 @@ impl Renderer {
             vertex_buffer,
             index_buffer,
             uniform_buffer,
-            position_buffer,
+            instance_buffer,
             bind_group,
             sample_count,
             multisample_texture_view,
             depth_texture_view,
             surface_config,
             map_size: 0,
+            material_colors: vec![[0.0; 4]; MAX_MATERIAL_COUNT],
         })
     }
 
@@ -279,7 +284,10 @@ impl Renderer {
         let mvp_matrix = mvp_matrix
             .try_into()
             .expect("mvp_matrix has incorrect length");
-        let uniforms = Uniforms { mvp_matrix };
+        let uniforms = Uniforms {
+            mvp_matrix,
+            material_colors: self.material_colors.clone().try_into().unwrap(),
+        };
 
         self.queue
             .write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&[uniforms]));
@@ -349,8 +357,23 @@ impl Renderer {
     pub fn upload_map(&mut self, map: Vec<f32>) -> Result<(), JsValue> {
         assert_eq!(map.len() % 4, 0); // verify vec4 alignment
         self.queue
-            .write_buffer(&self.position_buffer, 0, bytemuck::cast_slice(&map));
+            .write_buffer(&self.instance_buffer, 0, bytemuck::cast_slice(&map));
         self.map_size = map.len() / 4;
+        Ok(())
+    }
+
+    pub fn upload_materials(&mut self, material_colors: &[f32]) -> Result<(), JsValue> {
+        assert_eq!(material_colors.len() % 4, 0); // verify vec4 alignment
+        assert!(material_colors.len() / 4 < MAX_MATERIAL_COUNT); // verify max material count
+
+        self.material_colors = material_colors
+            .chunks(4)
+            .map(|c| c.try_into().expect("material_colors has incorrect length"))
+            .collect();
+        if (self.material_colors.len() * 4) < MAX_MATERIAL_COUNT {
+            self.material_colors.resize(MAX_MATERIAL_COUNT, [0.0; 4]);
+        }
+
         Ok(())
     }
 }

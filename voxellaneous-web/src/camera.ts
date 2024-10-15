@@ -1,7 +1,7 @@
 import { mat4, vec3 } from 'gl-matrix';
 
 const maxCameraPitch = Math.PI / 2 - 0.1;
-const cameraSpeed = 0.1;
+const cameraSpeed = 1.0;
 const mouseSensitivity = 0.001;
 
 export class CameraModule {
@@ -46,7 +46,7 @@ export class CameraModule {
 
         const aspectRatio = this.canvas.width / this.canvas.height;
         const projectionMatrix = mat4.create();
-        mat4.perspective(projectionMatrix, 90 * (Math.PI / 180), aspectRatio, 0.1, 100.0);
+        mat4.perspective(projectionMatrix, 90 * (Math.PI / 180), aspectRatio, 0.01, 10000.0);
 
         const mvpMatrix = mat4.create();
         mat4.multiply(mvpMatrix, projectionMatrix, viewMatrix);

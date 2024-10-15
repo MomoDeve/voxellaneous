@@ -1,15 +1,19 @@
 import { vec4 } from 'gl-matrix';
 import { CameraModule } from './camera';
-import { generateTerrainMap } from './map';
+import { generateTerrainMap } from './terrain/generator';
 import './style.css'
 
 import init, { Renderer } from 'voxellaneous-core';
+import { initializeTerrainEditor } from './terrain/editor';
 
 type AppData = {
   renderer: Renderer;
   canvas: HTMLCanvasElement;
 }
 
+export function updateTerrainMap(app: AppData): void {
+  app.renderer.upload_map(new Float32Array(generateTerrainMap()));
+}
 
 function initializeCanvasAutoresize(canvas: HTMLCanvasElement): { autoresizeCanvas: VoidFunction } {
   let newCanvasSize: { width: number; height: number} | undefined; 
@@ -23,9 +27,9 @@ function initializeCanvasAutoresize(canvas: HTMLCanvasElement): { autoresizeCanv
   const autoresizeCanvas = () => {
     if (!newCanvasSize) return;
     
-    data.canvas.width = newCanvasSize.width;
-    data.canvas.height = newCanvasSize.height;
-    data.renderer.resize(data.canvas.width, data.canvas.height);
+    App.canvas.width = newCanvasSize.width;
+    App.canvas.height = newCanvasSize.height;
+    App.renderer.resize(App.canvas.width, App.canvas.height);
     newCanvasSize = undefined
   }
   
@@ -37,6 +41,7 @@ async function initializeApp(): Promise<AppData> {
   
   await init({});
   const renderer = await Renderer.new(canvas);
+  const app: AppData = { renderer, canvas };
 
   const cameraModule = new CameraModule(canvas);
   cameraModule.camera.position = [10, 5, -10];
@@ -54,7 +59,8 @@ async function initializeApp(): Promise<AppData> {
   }
   requestAnimationFrame(render);
   
-  renderer.upload_map(new Float32Array(generateTerrainMap()));
+  updateTerrainMap(app);
+  initializeTerrainEditor();
 
   const colors: vec4[] = [
     [0.13, 0.55, 0.13, 1.0], 
@@ -68,8 +74,7 @@ async function initializeApp(): Promise<AppData> {
   ];
   renderer.upload_materials(new Float32Array(colors.flat() as number[]));
     
-  
-  return { renderer, canvas }
+  return app;
 }
 
-export const data = await initializeApp();
+export const App = await initializeApp();

@@ -1,5 +1,12 @@
 import { Noise } from 'noisejs';
 
+type NoiseParamList = [number, number, number, number];
+
+export const NoiseParams = {
+    scales: [0.001, 0.005, 0.01, 0.002] as NoiseParamList,
+    amplitudes: [100.0, 10.0, 50.0, 200.0] as NoiseParamList,
+}
+
 function getRandomInt(min: number, max: number) {
     min = Math.ceil(min);
     max = Math.floor(max);
@@ -22,15 +29,11 @@ export function generateTerrainMap(): number[] {
 
     const map = new Array(xSize * zSize * vecSize);
 
-    const noiseScales = [0.5, 0.01, 0.002];  
-    const noiseAmplitudes = [1.0, 10.0, 200.0];
-
     for (let xIdx = 0; xIdx < xSize; xIdx++) {
         for (let zIdx = 0; zIdx < zSize; zIdx++) {
            const offset = (xIdx * zSize + zIdx) * vecSize;
 
-            const height = noiseScales.reduce((acc, scale, idx) => acc + perlinNoise(xIdx, zIdx, scale, noiseAmplitudes[idx]), 0)
-
+            const height = NoiseParams.scales.reduce((acc, scale, idx) => acc + perlinNoise(xIdx, zIdx, scale, NoiseParams.amplitudes[idx]), 0)
             const materialId = Math.min(Math.floor(Math.abs(height)/ 15), 5);
 
             map[offset + 0] = xIdx;

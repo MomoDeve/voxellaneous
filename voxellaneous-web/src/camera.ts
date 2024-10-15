@@ -17,7 +17,7 @@ export class CameraModule {
     };
 
     constructor(private canvas: HTMLCanvasElement) {
-        window.addEventListener('click', () => {
+        canvas.addEventListener('click', () => {
             canvas.requestPointerLock();
         });
 

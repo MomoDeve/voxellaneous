@@ -7,6 +7,8 @@ edition = "2021"
 wasm-bindgen = "0.2"
 wgpu = "22.1"
 wasm-bindgen-futures = "0.4"
+serde = "1.0.210"
+serde-wasm-bindgen = "0.6.5"
 web-sys = "0.3"
 bytemuck = { version = "1.17", features = ["derive"] }
 

@@ -1,3 +1,4 @@
+// @ts-ignore
 import { Noise } from 'noisejs';
 
 type NoiseParamList = [number, number, number, number];
@@ -15,17 +16,21 @@ function getRandomInt(min: number, max: number) {
 
 
 // Initialize the Perlin noise generator
-const noise = new Noise(Math.random());
+let noise = new Noise(Math.random());
 
 function perlinNoise(x: number, z: number, scale: number, amplitude: number): number {
     return noise.perlin2(x * scale, z * scale) * amplitude;
 }
 
 
-export function generateTerrainMap(): number[] {
+export function generateTerrainMap(seed?: number): number[] {
     const xSize = 1024;
     const zSize = 1024;
     const vecSize = 4;
+
+    if (seed !== undefined) {
+        noise = new Noise(seed);
+    }
 
     const map = new Array(xSize * zSize * vecSize);
 

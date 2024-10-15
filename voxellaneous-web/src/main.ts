@@ -4,15 +4,15 @@ import { generateTerrainMap } from './terrain/generator';
 import './style.css'
 
 import init, { Renderer } from 'voxellaneous-core';
-import { initializeTerrainEditor } from './terrain/editor';
+import { initializeEditor } from './editor';
 
-type AppData = {
+export type AppData = {
   renderer: Renderer;
   canvas: HTMLCanvasElement;
 }
 
-export function updateTerrainMap(app: AppData): void {
-  app.renderer.upload_map(new Float32Array(generateTerrainMap()));
+export function updateTerrainMap(app: AppData, seed?: number): void {
+  app.renderer.upload_map(new Float32Array(generateTerrainMap(seed)));
 }
 
 function initializeCanvasAutoresize(canvas: HTMLCanvasElement): { autoresizeCanvas: VoidFunction } {
@@ -60,7 +60,8 @@ async function initializeApp(): Promise<AppData> {
   requestAnimationFrame(render);
   
   updateTerrainMap(app);
-  initializeTerrainEditor();
+
+  initializeEditor(app);
 
   const colors: vec4[] = [
     [0.13, 0.55, 0.13, 1.0], 

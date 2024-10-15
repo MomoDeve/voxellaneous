@@ -2,12 +2,24 @@ mod constants;
 mod utils;
 
 use constants::{Vertex, CUBE_INDICES, CUBE_VERTICES};
+use serde::Serialize;
 use utils::map_wgpu_err;
 use wasm_bindgen::prelude::*;
 use wgpu::util::DeviceExt;
 
 const MAX_INSTANCE_BUFFER_SIZE: usize = 32 * 4 * 1024 * 1024;
 const MAX_MATERIAL_COUNT: usize = 128;
+
+#[derive(Serialize)]
+struct SerializableAdapterInfo {
+    name: String,
+    vendor: u32,
+    device: u32,
+    device_type: String,
+    driver: String,
+    driver_info: String,
+    backend: String,
+}
 
 #[repr(C, align(16))]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
@@ -70,6 +82,7 @@ fn create_miltisample_texture(
 pub struct Renderer {
     device: wgpu::Device,
     queue: wgpu::Queue,
+    adapter_info: wgpu::AdapterInfo,
     surface: wgpu::Surface<'static>,
     surface_config: wgpu::SurfaceConfiguration,
     render_pipeline: wgpu::RenderPipeline,
@@ -109,6 +122,8 @@ impl Renderer {
             })
             .await
             .ok_or("Failed to find a suitable GPU adapter")?;
+
+        let adapter_info = adapter.get_info();
 
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor::default(), None)
@@ -253,6 +268,7 @@ impl Renderer {
         Ok(Renderer {
             device,
             queue,
+            adapter_info,
             surface,
             render_pipeline,
             vertex_buffer,
@@ -352,6 +368,19 @@ impl Renderer {
         frame.present();
 
         Ok(())
+    }
+
+    pub fn get_gpu_info(&self) -> JsValue {
+        let gpu_info = SerializableAdapterInfo {
+            name: self.adapter_info.name.clone(),
+            vendor: self.adapter_info.vendor,
+            device: self.adapter_info.device,
+            device_type: format!("{:?}", self.adapter_info.device_type),
+            driver: self.adapter_info.driver_info.clone(),
+            driver_info: self.adapter_info.driver_info.clone(),
+            backend: format!("{:?}", self.adapter_info.backend),
+        };
+        serde_wasm_bindgen::to_value(&gpu_info).unwrap()
     }
 
     pub fn upload_map(&mut self, map: Vec<f32>) -> Result<(), JsValue> {

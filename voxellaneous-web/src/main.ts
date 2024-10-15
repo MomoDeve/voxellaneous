@@ -6,8 +6,27 @@ import './style.css'
 import init, { Renderer } from 'voxellaneous-core';
 import { initializeEditor } from './editor';
 
+type Performance = {
+  fps: number;
+  frameTime: number;
+  lastTimeStamp: number;
+}
+
+function updatePerformance(performance: Performance, time: DOMHighResTimeStamp): void {
+  if (performance.lastTimeStamp === 0) {
+    performance.lastTimeStamp = time;
+    return;
+  }
+
+  const elapsed = time - performance.lastTimeStamp;
+  performance.lastTimeStamp = time;
+  performance.frameTime = elapsed;
+  performance.fps = 1000 / elapsed;
+}
+
 export type AppData = {
   renderer: Renderer;
+  performance: Performance;
   canvas: HTMLCanvasElement;
 }
 
@@ -41,15 +60,16 @@ async function initializeApp(): Promise<AppData> {
   
   await init({});
   const renderer = await Renderer.new(canvas);
-  const app: AppData = { renderer, canvas };
+  const app: AppData = { renderer, canvas, performance: { fps: 0, frameTime: 0, lastTimeStamp: 0 } };
 
   const cameraModule = new CameraModule(canvas);
   cameraModule.camera.position = [10, 5, -10];
 
   const { autoresizeCanvas } = initializeCanvasAutoresize(canvas);
   
-  const render = () => {
+  const render = (time: DOMHighResTimeStamp) => {
     autoresizeCanvas();
+    updatePerformance(app.performance, time);
     
     cameraModule.update();
     const mvpMatrix = cameraModule.calculateMVP();

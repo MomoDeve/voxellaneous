@@ -2,111 +2,81 @@
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct Vertex {
     position: [f32; 3],
-    uv: [f32; 2],
 }
 
 pub const CUBE_VERTICES: &[Vertex] = &[
     Vertex {
         position: [-0.5, -0.5, 0.5],
-        uv: [0.0, 0.0],
-    }, // Bottom-left
+    },
     Vertex {
         position: [0.5, -0.5, 0.5],
-        uv: [1.0, 0.0],
-    }, // Bottom-right
+    },
     Vertex {
         position: [0.5, 0.5, 0.5],
-        uv: [1.0, 1.0],
-    }, // Top-right
+    },
     Vertex {
         position: [-0.5, 0.5, 0.5],
-        uv: [0.0, 1.0],
-    }, // Top-left
-    // Back face
+    },
     Vertex {
         position: [-0.5, -0.5, -0.5],
-        uv: [1.0, 0.0],
-    }, // Bottom-right
+    },
     Vertex {
         position: [0.5, -0.5, -0.5],
-        uv: [0.0, 0.0],
-    }, // Bottom-left
+    },
     Vertex {
         position: [0.5, 0.5, -0.5],
-        uv: [0.0, 1.0],
-    }, // Top-left
+    },
     Vertex {
         position: [-0.5, 0.5, -0.5],
-        uv: [1.0, 1.0],
-    }, // Top-right
-    // Top face
+    },
     Vertex {
         position: [-0.5, 0.5, -0.5],
-        uv: [0.0, 0.0],
-    }, // Bottom-left
+    },
     Vertex {
         position: [0.5, 0.5, -0.5],
-        uv: [1.0, 0.0],
-    }, // Bottom-right
+    },
     Vertex {
         position: [0.5, 0.5, 0.5],
-        uv: [1.0, 1.0],
-    }, // Top-right
+    },
     Vertex {
         position: [-0.5, 0.5, 0.5],
-        uv: [0.0, 1.0],
-    }, // Top-left
-    // Bottom face
+    },
     Vertex {
         position: [-0.5, -0.5, -0.5],
-        uv: [0.0, 1.0],
-    }, // Top-left
+    },
     Vertex {
         position: [0.5, -0.5, -0.5],
-        uv: [1.0, 1.0],
-    }, // Top-right
+    },
     Vertex {
         position: [0.5, -0.5, 0.5],
-        uv: [1.0, 0.0],
-    }, // Bottom-right
+    },
     Vertex {
         position: [-0.5, -0.5, 0.5],
-        uv: [0.0, 0.0],
-    }, // Bottom-left
-    // Right face
+    },
     Vertex {
         position: [0.5, -0.5, -0.5],
-        uv: [0.0, 0.0],
-    }, // Bottom-left
+    },
     Vertex {
         position: [0.5, 0.5, -0.5],
-        uv: [1.0, 0.0],
-    }, // Top-left
+    },
     Vertex {
         position: [0.5, 0.5, 0.5],
-        uv: [1.0, 1.0],
-    }, // Top-right
+    },
     Vertex {
         position: [0.5, -0.5, 0.5],
-        uv: [0.0, 1.0],
-    }, // Bottom-right
-    // Left face
+    },
     Vertex {
         position: [-0.5, -0.5, -0.5],
-        uv: [1.0, 0.0],
-    }, // Bottom-right
+    },
     Vertex {
         position: [-0.5, 0.5, -0.5],
-        uv: [0.0, 0.0],
-    }, // Top-right
+    },
     Vertex {
         position: [-0.5, 0.5, 0.5],
-        uv: [0.0, 1.0],
-    }, // Top-left
+    },
     Vertex {
         position: [-0.5, -0.5, 0.5],
-        uv: [1.0, 1.0],
-    }, // Bottom-left
+    },
 ];
 
 pub const CUBE_INDICES: &[u16] = &[

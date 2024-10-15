@@ -24,4 +24,9 @@ export function initializeRendererEditor(pane: Pane, app: AppData): void {
     rendererFolder.addBinding(gpuData, 'driver', { label: 'Driver', readonly: true });
     rendererFolder.addBinding(gpuData, 'driver_info', { label: 'Driver Info', readonly: true });
     rendererFolder.addBinding(gpuData, 'backend', { label: 'Backend', readonly: true });
+
+    const performanceFolder = pane.addFolder({ title: 'Performance' });
+    performanceFolder.addBinding(app.performance, 'fps', { label: 'FPS', readonly: true, format: (v) => v.toFixed(2) });
+    performanceFolder.addBinding(app.performance, 'frameTime', { label: 'Frame Time (ms)', readonly: true, format: (v) => v.toFixed(2) });
+    
 }

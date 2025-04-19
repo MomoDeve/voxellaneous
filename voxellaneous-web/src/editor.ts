@@ -1,10 +1,9 @@
-import { Pane } from "tweakpane";
-import { AppData } from "./main";
-import { initializeTerrainEditor } from "./terrain/editor";
-import { initializeRendererEditor } from "./renderer/editor";
+import { Pane } from 'tweakpane';
+import { AppData } from './main';
+import { initializeRendererTools } from './renderer/editor';
+import { ProfilerData } from './profiler-data';
 
-export function initializeEditor(app: AppData): void {
-    const pane = new Pane();
-    initializeRendererEditor(pane, app);
-    initializeTerrainEditor(pane, app);
+export function initializeDevTools(app: AppData, profilerData: ProfilerData): void {
+  const pane = new Pane();
+  initializeRendererTools(pane, app, profilerData);
 }

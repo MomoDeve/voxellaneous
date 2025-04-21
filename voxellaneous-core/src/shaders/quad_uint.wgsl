@@ -16,10 +16,8 @@ fn vs_main(@builtin(vertex_index) vi: u32) -> VSOut {
     return out;
 }
 
-@group(0) @binding(0)
-var u_tex: texture_2d<u32>;
-@group(0) @binding(1)
-var u_samp: sampler;
+@group(0) @binding(0) var u_tex: texture_2d<u32>;
+@group(0) @binding(1) var u_samp: sampler;
 
 @fragment
 fn fs_main(in: VSOut) -> @location(0) vec4<f32> {

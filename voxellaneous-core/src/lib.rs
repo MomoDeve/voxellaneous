@@ -173,6 +173,10 @@ impl Renderer {
         };
         surface.configure(&device, &surface_config);
 
+        let sampler = device.create_sampler(&wgpu::SamplerDescriptor::default());
+
+        let depth_texture_view = create_depth_texture(&device, &surface_config);
+
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Shader"),
             source: wgpu::ShaderSource::Wgsl(include_str!("shaders/shader.wgsl").into()),
@@ -369,9 +373,6 @@ impl Renderer {
             "Quad Float Shader",
             "Quad Pipeline Float",
         );
-
-        let sampler = device.create_sampler(&wgpu::SamplerDescriptor::default());
-        let depth_texture_view = create_depth_texture(&device, &surface_config);
 
         Ok(Renderer {
             device,

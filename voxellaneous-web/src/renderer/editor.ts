@@ -13,18 +13,29 @@ type GPUData = {
 };
 
 export function initializeRendererTools(pane: Pane, app: AppData, profilerData: ProfilerData): void {
+  const settingsFolder = pane.addFolder({ title: 'Renderer Settings' });
+  settingsFolder.addBinding(app, 'presentTarget', {
+    label: 'G-Buffer Target',
+    options: [
+      { text: 'Albedo', value: 0 },
+      { text: 'Normal', value: 1 },
+      { text: 'Linear-Z', value: 2 },
+      { text: 'Depth', value: 3 },
+    ],
+  });
+
   const gpuData = app.renderer.get_gpu_info() as GPUData;
 
-  const rendererFolder = pane.addFolder({ title: 'Renderer' });
-  rendererFolder.expanded = false;
+  const backendFolder = pane.addFolder({ title: 'Renderer Backend' });
+  backendFolder.expanded = false;
 
-  rendererFolder.addBinding(gpuData, 'name', { label: 'Name', readonly: true });
-  rendererFolder.addBinding(gpuData, 'vendor', { label: 'Vendor', readonly: true, format: (v) => Math.floor(v) });
-  rendererFolder.addBinding(gpuData, 'device', { label: 'Device', readonly: true, format: (v) => Math.floor(v) });
-  rendererFolder.addBinding(gpuData, 'device_type', { label: 'Device Type', readonly: true });
-  rendererFolder.addBinding(gpuData, 'driver', { label: 'Driver', readonly: true });
-  rendererFolder.addBinding(gpuData, 'driver_info', { label: 'Driver Info', readonly: true });
-  rendererFolder.addBinding(gpuData, 'backend', { label: 'Backend', readonly: true });
+  backendFolder.addBinding(gpuData, 'name', { label: 'Name', readonly: true });
+  backendFolder.addBinding(gpuData, 'vendor', { label: 'Vendor', readonly: true, format: (v) => Math.floor(v) });
+  backendFolder.addBinding(gpuData, 'device', { label: 'Device', readonly: true, format: (v) => Math.floor(v) });
+  backendFolder.addBinding(gpuData, 'device_type', { label: 'Device Type', readonly: true });
+  backendFolder.addBinding(gpuData, 'driver', { label: 'Driver', readonly: true });
+  backendFolder.addBinding(gpuData, 'driver_info', { label: 'Driver Info', readonly: true });
+  backendFolder.addBinding(gpuData, 'backend', { label: 'Backend', readonly: true });
 
   const performanceFolder = pane.addFolder({ title: 'Performance' });
   performanceFolder.addBinding(profilerData, 'fps', { label: 'FPS', readonly: true, format: (v) => v.toFixed(2) });

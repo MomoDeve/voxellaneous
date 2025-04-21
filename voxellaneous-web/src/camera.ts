@@ -38,10 +38,18 @@ export class CameraModule {
     this.camera.position = position;
   }
 
+  get position(): vec3 {
+    return this.camera.position;
+  }
+
   setDirection(direction: vec3) {
     this.camera.yaw = Math.atan2(direction[0], direction[2]);
     this.camera.pitch = Math.asin(direction[1]);
     this.updateCameraDirection();
+  }
+
+  get direction(): vec3 {
+    return this.camera.direction;
   }
 
   isFocused(): boolean {

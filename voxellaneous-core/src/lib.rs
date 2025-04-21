@@ -42,10 +42,34 @@ struct PerDrawUniforms {
     inverse_model_matrix: [f32; 16],
 }
 
+pub fn create_render_texture_view(
+    device: &wgpu::Device,
+    width: u32,
+    height: u32,
+    format: wgpu::TextureFormat,
+    label: &str,
+) -> wgpu::TextureView {
+    let size = wgpu::Extent3d {
+        width,
+        height,
+        depth_or_array_layers: 1,
+    };
+    let texture = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some(label),
+        size,
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+        view_formats: &[],
+    });
+    texture.create_view(&wgpu::TextureViewDescriptor::default())
+}
+
 fn create_depth_texture(
     device: &wgpu::Device,
     config: &wgpu::SurfaceConfiguration,
-    sample_count: u32,
 ) -> wgpu::TextureView {
     let size = wgpu::Extent3d {
         width: config.width,
@@ -57,7 +81,7 @@ fn create_depth_texture(
         label: Some("Depth Texture"),
         size,
         mip_level_count: 1,
-        sample_count: sample_count,
+        sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
         format: wgpu::TextureFormat::Depth24PlusStencil8, // Depth format
         usage: wgpu::TextureUsages::RENDER_ATTACHMENT,    // Used as a render target
@@ -65,31 +89,6 @@ fn create_depth_texture(
     });
 
     depth_texture.create_view(&wgpu::TextureViewDescriptor::default())
-}
-
-fn create_miltisample_texture(
-    device: &wgpu::Device,
-    config: &wgpu::SurfaceConfiguration,
-    sample_count: u32,
-) -> wgpu::TextureView {
-    let size = wgpu::Extent3d {
-        width: config.width,
-        height: config.height,
-        depth_or_array_layers: 1,
-    };
-
-    let multisample_texture = device.create_texture(&wgpu::TextureDescriptor {
-        label: Some("Multisample Texture"),
-        size,
-        mip_level_count: 1,
-        sample_count,
-        dimension: wgpu::TextureDimension::D2,
-        format: config.format,
-        usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-        view_formats: &[],
-    });
-
-    multisample_texture.create_view(&wgpu::TextureViewDescriptor::default())
 }
 
 pub struct DrawCallData {
@@ -113,10 +112,16 @@ pub struct Renderer {
     per_frame_uniform_buffer: wgpu::Buffer,
     per_frame_bind_group_layout: wgpu::BindGroupLayout,
     per_draw_bind_group_layout: wgpu::BindGroupLayout,
+    quad_layout_uint: wgpu::BindGroupLayout,
+    quad_layout_float: wgpu::BindGroupLayout,
+    quad_pipeline_uint: wgpu::RenderPipeline,
+    quad_pipeline_float: wgpu::RenderPipeline,
     static_bind_group: wgpu::BindGroup,
-    multisample_texture_view: wgpu::TextureView,
+    gbuffer_albedo: wgpu::TextureView,
+    gbuffer_normal: wgpu::TextureView,
+    gbuffer_linear_z: wgpu::TextureView,
+    sampler: wgpu::Sampler,
     depth_texture_view: wgpu::TextureView,
-    sample_count: u32,
     draw_call_array: Vec<DrawCallData>,
 }
 
@@ -128,7 +133,6 @@ impl Renderer {
 
         let canvas_width = html_canvas.width();
         let canvas_height = html_canvas.height();
-        let sample_count = 4;
 
         let surface_target = wgpu::SurfaceTarget::Canvas(html_canvas);
         let surface = instance
@@ -147,7 +151,10 @@ impl Renderer {
         let adapter_info = adapter.get_info();
 
         let (device, queue) = adapter
-            .request_device(&wgpu::DeviceDescriptor::default())
+            .request_device(&wgpu::DeviceDescriptor {
+                required_features: wgpu::Features::TEXTURE_FORMAT_16BIT_NORM,
+                ..Default::default()
+            })
             .await
             .map_err(map_wgpu_err)?;
 
@@ -273,7 +280,7 @@ impl Renderer {
         });
 
         let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("Render Pipeline"),
+            label: Some("G-Buffer Render Pipeline"),
             layout: Some(&pipeline_layout),
             vertex: wgpu::VertexState {
                 module: &shader,
@@ -288,13 +295,26 @@ impl Renderer {
             fragment: Some(wgpu::FragmentState {
                 module: &shader,
                 entry_point: Some("fs_main"),
-                targets: &[Some(wgpu::ColorTargetState {
-                    format: surface_format,
-                    blend: Some(wgpu::BlendState::REPLACE),
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
+                targets: &[
+                    Some(wgpu::ColorTargetState {
+                        format: wgpu::TextureFormat::Rgba8Unorm,
+                        blend: None,
+                        write_mask: wgpu::ColorWrites::ALL,
+                    }),
+                    Some(wgpu::ColorTargetState {
+                        format: wgpu::TextureFormat::Rgba8Unorm,
+                        blend: None,
+                        write_mask: wgpu::ColorWrites::ALL,
+                    }),
+                    Some(wgpu::ColorTargetState {
+                        format: wgpu::TextureFormat::R16Uint,
+                        blend: None,
+                        write_mask: wgpu::ColorWrites::ALL,
+                    }),
+                ],
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
             }),
+            primitive: wgpu::PrimitiveState::default(),
             depth_stencil: Some(wgpu::DepthStencilState {
                 format: wgpu::TextureFormat::Depth24PlusStencil8,
                 depth_write_enabled: true,
@@ -302,19 +322,56 @@ impl Renderer {
                 stencil: wgpu::StencilState::default(),
                 bias: wgpu::DepthBiasState::default(),
             }),
-            primitive: wgpu::PrimitiveState::default(),
-            multisample: wgpu::MultisampleState {
-                count: sample_count,
-                mask: !0,
-                alpha_to_coverage_enabled: false,
-            },
+            multisample: wgpu::MultisampleState::default(),
             multiview: None,
             cache: None,
         });
 
-        let multisample_texture_view =
-            create_miltisample_texture(&device, &surface_config, sample_count);
-        let depth_texture_view = create_depth_texture(&device, &surface_config, sample_count);
+        let gbuffer_albedo = create_render_texture_view(
+            &device,
+            canvas_width,
+            canvas_height,
+            wgpu::TextureFormat::Rgba8Unorm,
+            "GBuffer Albedo",
+        );
+        let gbuffer_normal = create_render_texture_view(
+            &device,
+            canvas_width,
+            canvas_height,
+            wgpu::TextureFormat::Rgba8Unorm,
+            "GBuffer Normal",
+        );
+        let gbuffer_linear_z = create_render_texture_view(
+            &device,
+            canvas_width,
+            canvas_height,
+            wgpu::TextureFormat::R16Uint,
+            "GBuffer LinearZ",
+        );
+
+        let (quad_layout_uint, quad_pipeline_uint, _) = Renderer::create_fullscreen_quad_pipeline(
+            &device,
+            surface_format,
+            include_str!("shaders/quad_uint.wgsl"),
+            wgpu::TextureSampleType::Uint,
+            wgpu::SamplerBindingType::NonFiltering,
+            "Quad Layout Uint",
+            "Quad Uint Shader",
+            "Quad Pipeline Uint",
+        );
+        let (quad_layout_float, quad_pipeline_float, _) = Renderer::create_fullscreen_quad_pipeline(
+            &device,
+            surface_format,
+            include_str!("shaders/quad_float.wgsl"),
+            wgpu::TextureSampleType::Float { filterable: false },
+            wgpu::SamplerBindingType::Filtering,
+            "Quad Layout Float",
+            "Quad Float Shader",
+            "Quad Pipeline Float",
+        );
+
+        let sampler = device.create_sampler(&wgpu::SamplerDescriptor::default());
+        let depth_texture_view = create_depth_texture(&device, &surface_config);
 
         Ok(Renderer {
             device,
@@ -329,10 +386,16 @@ impl Renderer {
             per_frame_bind_group_layout,
             per_draw_bind_group_layout,
             static_bind_group,
-            sample_count,
-            multisample_texture_view,
             depth_texture_view,
+            gbuffer_albedo,
+            gbuffer_normal,
+            gbuffer_linear_z,
             surface_config,
+            quad_layout_uint,
+            quad_layout_float,
+            quad_pipeline_uint,
+            quad_pipeline_float,
+            sampler,
             draw_call_array: Vec::new(),
         })
     }
@@ -341,14 +404,123 @@ impl Renderer {
         self.surface_config.width = width;
         self.surface_config.height = height;
         self.surface.configure(&self.device, &self.surface_config);
-        self.multisample_texture_view =
-            create_miltisample_texture(&self.device, &self.surface_config, self.sample_count);
-        self.depth_texture_view =
-            create_depth_texture(&self.device, &self.surface_config, self.sample_count);
+
+        // Recreate depth
+        self.depth_texture_view = create_depth_texture(&self.device, &self.surface_config);
+
+        // Recreate G‑buffer targets
+        self.gbuffer_albedo = create_render_texture_view(
+            &self.device,
+            width,
+            height,
+            wgpu::TextureFormat::Rgba8Unorm,
+            "GBuffer Albedo",
+        );
+        self.gbuffer_normal = create_render_texture_view(
+            &self.device,
+            width,
+            height,
+            wgpu::TextureFormat::Rgba8Unorm,
+            "GBuffer Normal",
+        );
+        self.gbuffer_linear_z = create_render_texture_view(
+            &self.device,
+            width,
+            height,
+            wgpu::TextureFormat::R16Uint,
+            "GBuffer LinearZ",
+        );
+
         Ok(())
     }
 
-    pub fn render(&mut self, vp_matrix: &[f32], view_position: &[f32]) -> Result<(), JsValue> {
+    /// Helper to build a full‑screen quad pipeline + bind‑group layout
+    fn create_fullscreen_quad_pipeline(
+        device: &wgpu::Device,
+        surface_format: wgpu::TextureFormat,
+        shader_src: &'static str,
+        sample_type: wgpu::TextureSampleType,
+        sampler_type: wgpu::SamplerBindingType,
+        layout_label: &str,
+        shader_label: &str,
+        pipeline_label: &str,
+    ) -> (
+        wgpu::BindGroupLayout,
+        wgpu::RenderPipeline,
+        wgpu::ShaderModule,
+    ) {
+        // 1) bind‑group layout
+        let quad_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some(layout_label),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type,
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(sampler_type),
+                    count: None,
+                },
+            ],
+        });
+
+        // 2) shader module
+        let quad_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some(shader_label),
+            source: wgpu::ShaderSource::Wgsl(shader_src.into()),
+        });
+
+        // 3) pipeline
+        let quad_pipeline = {
+            let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some(&format!("{} Layout", pipeline_label)),
+                bind_group_layouts: &[&quad_layout],
+                push_constant_ranges: &[],
+            });
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some(pipeline_label),
+                layout: Some(&layout),
+                vertex: wgpu::VertexState {
+                    module: &quad_shader,
+                    entry_point: Some("vs_main"),
+                    buffers: &[],
+                    compilation_options: wgpu::PipelineCompilationOptions::default(),
+                },
+                fragment: Some(wgpu::FragmentState {
+                    module: &quad_shader,
+                    entry_point: Some("fs_main"),
+                    targets: &[Some(wgpu::ColorTargetState {
+                        format: surface_format,
+                        blend: None,
+                        write_mask: wgpu::ColorWrites::ALL,
+                    })],
+                    compilation_options: wgpu::PipelineCompilationOptions::default(),
+                }),
+                primitive: Default::default(),
+                depth_stencil: None,
+                multisample: Default::default(),
+                multiview: None,
+                cache: None,
+            })
+        };
+
+        (quad_layout, quad_pipeline, quad_shader)
+    }
+
+    pub fn render(
+        &mut self,
+        vp_matrix: &[f32],
+        view_position: &[f32],
+        present_target: usize,
+    ) -> Result<(), JsValue> {
         let vp_matrix = vp_matrix
             .try_into()
             .expect("mvp_matrix has incorrect length");
@@ -364,29 +536,6 @@ impl Renderer {
             bytemuck::cast_slice(&[per_frame_uniforms]),
         );
 
-        let frame = self
-            .surface
-            .get_current_texture()
-            .map_err(|e| JsValue::from_str(&e.to_string()))?;
-        let view = frame
-            .texture
-            .create_view(&wgpu::TextureViewDescriptor::default());
-
-        // Create a command encoder for the render pass
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Render Encoder"),
-            });
-
-        // Begin render pass
-        let clear_color = wgpu::Color {
-            r: 0.53,
-            g: 0.81,
-            b: 0.92,
-            a: 1.0,
-        };
-
         let per_frame_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("Per Frame Bind Group"),
             layout: &self.per_frame_bind_group_layout,
@@ -396,46 +545,129 @@ impl Renderer {
             }],
         });
 
-        let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("Render Pass"),
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: &self.multisample_texture_view,
-                resolve_target: Some(&view),
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(clear_color),
-                    store: wgpu::StoreOp::Store,
-                },
-            })],
-            depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                view: &self.depth_texture_view,
-                depth_ops: Some(wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(1.0),
-                    store: wgpu::StoreOp::Discard,
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+        {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("GBuffer Pass"),
+                color_attachments: &[
+                    Some(wgpu::RenderPassColorAttachment {
+                        view: &self.gbuffer_albedo,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                            store: wgpu::StoreOp::Store,
+                        },
+                    }),
+                    Some(wgpu::RenderPassColorAttachment {
+                        view: &self.gbuffer_normal,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                            store: wgpu::StoreOp::Store,
+                        },
+                    }),
+                    Some(wgpu::RenderPassColorAttachment {
+                        view: &self.gbuffer_linear_z,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                            store: wgpu::StoreOp::Store,
+                        },
+                    }),
+                ],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &self.depth_texture_view,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(1.0),
+                        store: wgpu::StoreOp::Discard,
+                    }),
+                    stencil_ops: None,
                 }),
-                stencil_ops: None,
-            }),
-            timestamp_writes: None,
-            occlusion_query_set: None,
-        });
-
-        // Bind pipeline, vertex buffer, index buffer, and uniforms
-        render_pass.set_pipeline(&self.render_pipeline);
-        render_pass.set_bind_group(0, &self.static_bind_group, &[]);
-        render_pass.set_bind_group(1, &per_frame_bind_group, &[]);
-        render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-        render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
-
-        for draw_call_data in &self.draw_call_array {
-            render_pass.set_bind_group(2, &draw_call_data.bind_group, &[]);
-            render_pass.draw_indexed(0..CUBE_INDICES.len() as u32, 0, 0..1);
+                ..Default::default()
+            });
+            pass.set_pipeline(&self.render_pipeline);
+            pass.set_bind_group(0, &self.static_bind_group, &[]);
+            pass.set_bind_group(1, &per_frame_bind_group, &[]);
+            pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+            pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+            for dc in &self.draw_call_array {
+                pass.set_bind_group(2, &dc.bind_group, &[]);
+                pass.draw_indexed(0..CUBE_INDICES.len() as u32, 0, 0..1);
+            }
         }
 
-        drop(render_pass);
+        // 2) Present pass: full‑screen quad sampling chosen G‑buffer
+        let frame = self.surface.get_current_texture().map_err(map_wgpu_err)?;
+        let frame_view = frame.texture.create_view(&Default::default());
+        {
+            // choose which pipeline & layout
+            let (pipeline, layout, view) = match present_target {
+                0 => (
+                    &self.quad_pipeline_float,
+                    &self.quad_layout_float,
+                    &self.gbuffer_albedo,
+                ),
+                1 => (
+                    &self.quad_pipeline_float,
+                    &self.quad_layout_float,
+                    &self.gbuffer_normal,
+                ),
+                2 => (
+                    &self.quad_pipeline_uint,
+                    &self.quad_layout_uint,
+                    &self.gbuffer_linear_z,
+                ),
+                3 => (
+                    &self.quad_pipeline_float,
+                    &self.quad_layout_float,
+                    &self.depth_texture_view,
+                ),
+                _ => (
+                    &self.quad_pipeline_float,
+                    &self.quad_layout_float,
+                    &self.gbuffer_albedo,
+                ),
+            };
 
-        // Submit the commands to the GPU
-        self.queue.submit(std::iter::once(encoder.finish()));
+            // create bind group
+            let quad_bind = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::TextureView(view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::Sampler(&self.sampler),
+                    },
+                ],
+                label: Some("Quad Present BG"),
+            });
+
+            // draw full‑screen
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("Present Pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &frame_view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                ..Default::default()
+            });
+            pass.set_pipeline(pipeline);
+            pass.set_bind_group(0, &quad_bind, &[]);
+            pass.draw(0..3, 0..1);
+        }
+
+        self.queue.submit(Some(encoder.finish()));
         frame.present();
-
         Ok(())
     }
 

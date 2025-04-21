@@ -10,6 +10,7 @@ import { vec3 } from 'gl-matrix';
 
 export type AppData = {
   renderer: Renderer;
+  presentTarget: number;
   canvas: HTMLCanvasElement;
 };
 
@@ -47,7 +48,7 @@ async function initializeApp(): Promise<AppData> {
 
   await init({});
   const renderer = await Renderer.new(canvas);
-  const app: AppData = { renderer, canvas };
+  const app: AppData = { renderer, canvas, presentTarget: 0 };
   const profilerData: ProfilerData = { fps: 0, frameTime: 0, lastTimeStamp: 0 };
 
   const cameraModule = new CameraModule(canvas);
@@ -63,7 +64,7 @@ async function initializeApp(): Promise<AppData> {
     cameraModule.update();
     const mvpMatrix = cameraModule.calculateMVP();
 
-    renderer.render(new Float32Array(mvpMatrix), new Float32Array(cameraModule.camera.position));
+    renderer.render(new Float32Array(mvpMatrix), new Float32Array(cameraModule.position), app.presentTarget);
   };
   registerRecurringAnimation(render);
 

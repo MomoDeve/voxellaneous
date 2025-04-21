@@ -6,7 +6,8 @@ use crate::primitives::RGBA;
 #[derive(Serialize, Deserialize)]
 pub struct VoxelObject {
     pub id: String,
-    pub model: [f32; 16],
+    pub model_matrix: [f32; 16],
+    pub inv_model_matrix: [f32; 16],
     pub dims: [u32; 3],
     pub voxels: Vec<u8>,
 }

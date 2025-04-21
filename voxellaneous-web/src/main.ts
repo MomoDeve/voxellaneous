@@ -6,6 +6,7 @@ import { initializeDevTools } from './editor';
 import { createCornellBoxScene } from '../tests/cornell-box';
 import { Scene } from './scene';
 import { ProfilerData, updateProfilerData } from './profiler-data';
+import { vec3 } from 'gl-matrix';
 
 export type AppData = {
   renderer: Renderer;
@@ -50,8 +51,8 @@ async function initializeApp(): Promise<AppData> {
   const profilerData: ProfilerData = { fps: 0, frameTime: 0, lastTimeStamp: 0 };
 
   const cameraModule = new CameraModule(canvas);
-  cameraModule.camera.position = [2, 2, -2];
-  cameraModule.camera.speed = 0.1;
+  cameraModule.setDirection(vec3.normalize(vec3.create(), [0.5, 0, -1]));
+  cameraModule.setPosition([-50, 0, 100]);
 
   const { autoresizeCanvas } = createCanvasAutoresize(app);
 

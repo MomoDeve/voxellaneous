@@ -5,7 +5,8 @@ export type RGBA = [number, number, number, number];
 
 export interface VoxelObject {
   id: string;
-  model: mat4;
+  model_matrix: mat4;
+  inv_model_matrix: mat4;
   dims: vec3;
   voxels: Uint8Array;
 }

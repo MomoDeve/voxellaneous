@@ -6,7 +6,7 @@ const mouseSensitivity = 0.001;
 export class CameraModule {
   private keysPressedState: { [key: KeyboardEvent['code']]: boolean } = {};
 
-  camera = {
+  private camera = {
     position: [0, 0, 0] as vec3,
     direction: [0, 0, 1] as vec3,
     right: [-1, 0, 0] as vec3,
@@ -32,6 +32,16 @@ export class CameraModule {
     window.addEventListener('mousemove', (event) => {
       this.handleMouseMove(event);
     });
+  }
+
+  setPosition(position: vec3) {
+    this.camera.position = position;
+  }
+
+  setDirection(direction: vec3) {
+    this.camera.yaw = Math.atan2(direction[0], direction[2]);
+    this.camera.pitch = Math.asin(direction[1]);
+    this.updateCameraDirection();
   }
 
   isFocused(): boolean {

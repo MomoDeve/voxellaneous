@@ -25,7 +25,7 @@ struct SerializableAdapterInfo {
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 struct PerFrameUniforms {
     vp_matrix: [f32; 16],
-    view_position: [f32; 3],
+    camera_position: [f32; 3],
     _padding: f32,
 }
 
@@ -39,6 +39,7 @@ struct StaticUniforms {
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 struct PerDrawUniforms {
     model_matrix: [f32; 16],
+    inverse_model_matrix: [f32; 16],
 }
 
 fn create_depth_texture(
@@ -241,7 +242,7 @@ impl Renderer {
                     },
                     wgpu::BindGroupLayoutEntry {
                         binding: 1,
-                        visibility: wgpu::ShaderStages::VERTEX,
+                        visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
                         ty: wgpu::BindingType::Buffer {
                             ty: wgpu::BufferBindingType::Uniform,
                             has_dynamic_offset: false,
@@ -353,7 +354,7 @@ impl Renderer {
             .expect("mvp_matrix has incorrect length");
         let per_frame_uniforms = PerFrameUniforms {
             vp_matrix,
-            view_position: view_position.try_into().unwrap(),
+            camera_position: view_position.try_into().unwrap(),
             _padding: 0.0,
         };
 
@@ -515,7 +516,8 @@ impl Renderer {
                     .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                         label: Some("Per Draw Uniform Buffer"),
                         contents: bytemuck::cast_slice(&[PerDrawUniforms {
-                            model_matrix: obj.model,
+                            model_matrix: obj.model_matrix,
+                            inverse_model_matrix: obj.inv_model_matrix,
                         }]),
                         usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
                     });

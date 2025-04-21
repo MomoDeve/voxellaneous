@@ -31,17 +31,26 @@ function createSphereVoxelData([nx, ny, nz]: [number, number, number], paletteIn
   return voxels;
 }
 
-function createModelMatrix(scale: vec3, translate: vec3): mat4 {
-  const model = mat4.create();
-  mat4.translate(model, model, translate);
-  mat4.scale(model, model, scale);
-  return model;
+function addObjectToScene(scene: Scene, id: string, dims: vec3, translate: vec3, voxels: Uint8Array): void {
+  const modelMatrix = mat4.create();
+  mat4.translate(modelMatrix, modelMatrix, translate);
+  mat4.scale(modelMatrix, modelMatrix, dims);
+  const inverseModelMatrix = mat4.invert(mat4.create(), modelMatrix);
+
+  scene.objects.push({
+    id,
+    dims,
+    model_matrix: modelMatrix,
+    inv_model_matrix: inverseModelMatrix,
+    voxels,
+  });
 }
 
 /** Builds a Cornell box scene using bounding-box objects and 3D‐texture voxel data */
 export function createCornellBoxScene(scene: Scene): void {
   // 4‐color palette: red, green, white, gray
   scene.palette = [
+    [0, 0, 0, 255], // black (unused)
     [255, 0, 0, 255], // red
     [0, 255, 0, 255], // green
     [255, 255, 255, 255], // white
@@ -50,51 +59,57 @@ export function createCornellBoxScene(scene: Scene): void {
 
   scene.objects = [];
 
-  // Left wall: 1×8×8 voxels, red
-  scene.objects.push({
-    id: 'left_wall',
-    dims: [1, 8, 8],
-    model: createModelMatrix([1, 8, 8], vec3.fromValues(-4, 0, 0)),
-    voxels: createUniformVoxelData([1, 8, 8], 0),
-  });
+  // Left wall: 10×80×80 voxels, red
+  addObjectToScene(
+    scene,
+    'left_wall',
+    vec3.fromValues(10, 80, 80),
+    vec3.fromValues(-45, 0, 0),
+    createUniformVoxelData([10, 80, 80], 1),
+  );
 
-  // Right wall: 1×8×8 voxels, green
-  scene.objects.push({
-    id: 'right_wall',
-    dims: [1, 8, 8],
-    model: createModelMatrix([1, 8, 8], vec3.fromValues(4, 0, 0)),
-    voxels: createUniformVoxelData([1, 8, 8], 1),
-  });
+  // Right wall: 10×80×80 voxels, green
+  addObjectToScene(
+    scene,
+    'right_wall',
+    vec3.fromValues(10, 80, 80),
+    vec3.fromValues(45, 0, 0),
+    createUniformVoxelData([10, 80, 80], 2),
+  );
 
-  // Floor: 8×1×8 voxels, white
-  scene.objects.push({
-    id: 'floor',
-    dims: [8, 1, 8],
-    model: createModelMatrix([8, 1, 8], vec3.fromValues(0, -4, 0)),
-    voxels: createUniformVoxelData([8, 1, 8], 2),
-  });
+  // Bottom wall: 80×10×80 voxels, white
+  addObjectToScene(
+    scene,
+    'floor',
+    vec3.fromValues(100, 10, 80),
+    vec3.fromValues(0, -45, 0),
+    createUniformVoxelData([100, 10, 80], 3),
+  );
 
-  // Ceiling: 8×1×8 voxels, white
-  scene.objects.push({
-    id: 'ceiling',
-    dims: [8, 1, 8],
-    model: createModelMatrix([8, 1, 8], vec3.fromValues(0, 4, 0)),
-    voxels: createUniformVoxelData([8, 1, 8], 2),
-  });
+  // Top wall: 80×10×80 voxels, white
+  addObjectToScene(
+    scene,
+    'ceiling',
+    vec3.fromValues(100, 10, 80),
+    vec3.fromValues(0, 45, 0),
+    createUniformVoxelData([100, 10, 80], 3),
+  );
 
-  // Back wall: 8×8×1 voxels, white
-  scene.objects.push({
-    id: 'back_wall',
-    dims: [8, 8, 1],
-    model: createModelMatrix([8, 8, 1], vec3.fromValues(0, 0, -4)),
-    voxels: createUniformVoxelData([8, 8, 1], 2),
-  });
+  // Back wall: 100×100×10 voxels, white
+  addObjectToScene(
+    scene,
+    'back_wall',
+    vec3.fromValues(100, 100, 10),
+    vec3.fromValues(0, 0, -45),
+    createUniformVoxelData([100, 100, 10], 3),
+  );
 
-  // Sphere: 32×32×32 voxels, gray
-  scene.objects.push({
-    id: 'sphere',
-    dims: [32, 32, 32],
-    model: createModelMatrix([3, 3, 3], vec3.fromValues(0, 0, 0)),
-    voxels: createSphereVoxelData([32, 32, 32], 3),
-  });
+  // Sphere in the center: 32×32×32 voxels, gray
+  addObjectToScene(
+    scene,
+    'sphere',
+    vec3.fromValues(32, 32, 32),
+    vec3.fromValues(0, 0, 0),
+    createSphereVoxelData([32, 32, 32], 4),
+  );
 }

@@ -1,31 +1,31 @@
-
 struct VertexInput {
-    @location(0) position: vec3<f32>,
+    @location(0) position: vec3<f32>,  // in object space [-0.5,0.5]^3
 };
 
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
-    @location(0) world_position: vec3<f32>,
+    @location(0) obj_pos: vec3<f32>,   // still in object space
 };
 
 struct PerFrameUniforms {
     vp_matrix: mat4x4<f32>,
-    view_position: vec3<f32>,
+    cam_pos_ws: vec3<f32>,
     _padding: f32,
 };
 
 struct StaticUniforms {
-    color_palette: array<vec4<u32>, 64>,
+    palette: array<vec4<u32>, 64>,
 };
 
 struct PerDrawUniforms {
     model_matrix: mat4x4<f32>,
+    inv_model_matrix: mat4x4<f32>,
 };
 
-@group(0) @binding(0) var<uniform> static_uniforms: StaticUniforms;
-@group(1) @binding(0) var<uniform> per_frame_uniforms: PerFrameUniforms;
+@group(0) @binding(0) var<uniform> u_static: StaticUniforms;
+@group(1) @binding(0) var<uniform> u_frame: PerFrameUniforms;
 @group(2) @binding(0) var voxel_texture: texture_3d<u32>;
-@group(2) @binding(1) var<uniform> per_draw_uniforms: PerDrawUniforms;
+@group(2) @binding(1) var<uniform> u_draw: PerDrawUniforms;
 
 fn unpack_color(color: u32) -> vec4<f32> {
     let r = f32((color >> 24) & 0xFFu) / 255.0;
@@ -36,47 +36,64 @@ fn unpack_color(color: u32) -> vec4<f32> {
 }
 
 @vertex
-fn vs_main(input: VertexInput) -> VertexOutput {
+fn vs_main(in: VertexInput) -> VertexOutput {
     var out: VertexOutput;
-    let local_position = per_draw_uniforms.model_matrix * vec4<f32>(input.position, 1.0);
-    out.position = per_frame_uniforms.vp_matrix * vec4<f32>(local_position.xyz, 1.0);
-    out.world_position = local_position.xyz;
+    let ws4 = u_draw.model_matrix * vec4<f32>(in.position, 1.0);
+    out.position = u_frame.vp_matrix * ws4;
+    out.obj_pos  = in.position;
     return out;
 }
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    let uvw = in.world_position * 0.5 + vec3<f32>(0.5);
+    // 1) ray origin & dir in object space
+    let cam_pos = (u_draw.inv_model_matrix * vec4<f32>(u_frame.cam_pos_ws, 1.0)).xyz;
+    let ray_dir = normalize(in.obj_pos - cam_pos);
 
-    let dims: vec3<u32> = textureDimensions(voxel_texture, 0);
-    let coord = vec3<u32>(uvw * vec3<f32>(f32(dims.x), f32(dims.y), f32(dims.z)));
-
-    let idx: u32 = textureLoad(voxel_texture, coord, 0).r;
-    let base_pallete_idx = idx / 4u;
-    let comp_pallete_idx = idx % 4u;
-
-    let packed_color = static_uniforms.color_palette[base_pallete_idx][comp_pallete_idx];
-    let base_color = unpack_color(packed_color);
-
-    let V = normalize(per_frame_uniforms.view_position - in.world_position);
-
-    let p = in.world_position;
-    let ax = abs(p.x);
-    let ay = abs(p.y);
-    let az = abs(p.z);
-
-    var N: vec3<f32>;
-    if (ax > ay && ax > az) {
-        N = vec3<f32>(sign(p.x), 0.0, 0.0);
-    } else if (ay > az) {
-        N = vec3<f32>(0.0, sign(p.y), 0.0);
-    } else {
-        N = vec3<f32>(0.0, 0.0, sign(p.z));
+    // 2) compute exit t_max for [-0.5,0.5]^3
+    var t_max = 1e6;
+    if (ray_dir.x != 0.0) {
+        let t1 = (-0.5 - cam_pos.x) / ray_dir.x;
+        let t2 = ( 0.5 - cam_pos.x) / ray_dir.x;
+        t_max = min(t_max, max(t1, t2));
+    }
+    if (ray_dir.y != 0.0) {
+        let t1 = (-0.5 - cam_pos.y) / ray_dir.y;
+        let t2 = ( 0.5 - cam_pos.y) / ray_dir.y;
+        t_max = min(t_max, max(t1, t2));
+    }
+    if (ray_dir.z != 0.0) {
+        let t1 = (-0.5 - cam_pos.z) / ray_dir.z;
+        let t2 = ( 0.5 - cam_pos.z) / ray_dir.z;
+        t_max = min(t_max, max(t1, t2));
     }
 
-    let ambient = 0.2;
-    let diff = abs(dot(N, V));
-    let lighting = ambient + (1.0 - ambient) * diff;
+    let STEPS: u32 = 64u;
+    let dt = t_max / f32(STEPS);
+    var t: f32 = 0.0;
+    for (var i: u32 = 0u; i < STEPS; i = i + 1u) {
+        let ray_pos = cam_pos + ray_dir * t;
 
-    return vec4<f32>(base_color.rgb * lighting, base_color.a);
+        // map [-0.5,0.5]→[0,1]
+        let uvw = clamp(ray_pos + vec3<f32>(0.5), vec3<f32>(0.0), vec3<f32>(1.0));
+
+        // fetch voxel index
+        let dims  = textureDimensions(voxel_texture, 0);
+        let coord = vec3<u32>(
+            u32(uvw.x * f32(dims.x)),
+            u32(uvw.y * f32(dims.y)),
+            u32(uvw.z * f32(dims.z)),
+        );
+        let idx = textureLoad(voxel_texture, coord, 0).r;
+        if (idx != 0u) {
+            // unpack and shade
+            let packed    = u_static.palette[idx / 4u][idx % 4u];
+            let base_color  = unpack_color(packed);
+            return base_color;
+        }
+        t = t + dt;
+    }
+
+    discard;
+    return vec4<f32>(0.0); // never reached
 }

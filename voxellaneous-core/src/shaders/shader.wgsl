@@ -50,7 +50,7 @@ fn fs_main(in: VertexOutput) -> GBuffer {
 
     let dims = vec3<u32>(textureDimensions(voxel_texture, 0));
     let dims_f = vec3<f32>(dims);
-    let inv_dir = sign(dir_os) / abs(dir_os);
+    let inv_dir = sign(dir_os) / max(abs(dir_os), vec3<f32>(1e-4));
 
     let bounds_min = vec3<f32>(-0.5);
     let bounds_max = vec3<f32>(0.5);

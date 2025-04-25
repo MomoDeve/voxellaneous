@@ -24,7 +24,7 @@ fn fs_main(in: VSOut) -> @location(0) vec4<f32> {
     let dims = textureDimensions(u_tex, 0);
     let coord = vec2<i32>(
         i32(in.uv.x * f32(dims.x)),
-        i32(in.uv.y * f32(dims.y))
+        i32((1.0 - in.uv.y) * f32(dims.y))
     );
     let texel: vec4<u32> = textureLoad(u_tex, coord, 0);
     // albedo was Rgba16Uint → normalize by 65535

@@ -97,7 +97,7 @@ export function createCornellBoxScene(scene: Scene): void {
     scene,
     'ceiling',
     vec3.fromValues(100, 10, 80),
-    vec3.fromValues(0, 44, 0),
+    vec3.fromValues(0, 45, 0),
     createUniformVoxelData([100, 10, 80], 3),
   );
 
@@ -106,7 +106,7 @@ export function createCornellBoxScene(scene: Scene): void {
     scene,
     'back_wall',
     vec3.fromValues(100, 100, 10),
-    vec3.fromValues(0, 0, -44),
+    vec3.fromValues(0, 0, -45),
     createUniformVoxelData([100, 100, 10], 3),
   );
 

@@ -68,12 +68,9 @@ fn fs_main(in: VertexOutput) -> GBuffer {
     let ray_start = cam_os + t * dir_os + vec3<f32>(0.5);
     let offset = dir_os * (1.0 / dims_f);
     let ray_voxel = ray_start * dims_f + offset;
-    var voxel = vec3<i32>(ray_voxel);
-
+    var voxel = vec3<i32>(floor(ray_voxel));
     let step = vec3<i32>(select(vec3<f32>(-1.0), vec3<f32>(1.0), dir_os > vec3<f32>(0.0)));
-
-    let voxel_f = vec3<f32>(voxel);
-    let next_boundary = voxel_f + select(vec3<f32>(0.0), vec3<f32>(1.0), dir_os > vec3<f32>(0.0));
+    let next_boundary = select(vec3<f32>(ceil(ray_voxel)), floor(ray_voxel), dir_os > vec3<f32>(0.0));
     var t_max = (next_boundary - ray_voxel) * inv_dir;
     let t_delta = abs(inv_dir);
 
@@ -96,7 +93,7 @@ fn fs_main(in: VertexOutput) -> GBuffer {
             hit_idx = idx;
             hit_voxel = coord;
             hit_t = t;
-
+            
             if last_axis == 0 {
                 hit_normal = vec3<f32>(-f32(step.x), 0.0, 0.0);
             } else if last_axis == 1 {
@@ -104,23 +101,23 @@ fn fs_main(in: VertexOutput) -> GBuffer {
             } else {
                 hit_normal = vec3<f32>(0.0, 0.0, -f32(step.z));
             }
-
+            
             break;
         }
 
         if t_max.x < t_max.y && t_max.x < t_max.z {
             voxel.x += step.x;
-            t = t_max.x;
+            t += t_max.x;
             t_max.x += t_delta.x;
             last_axis = 0;
         } else if t_max.y < t_max.z {
             voxel.y += step.y;
-            t = t_max.y;
+            t += t_max.y;
             t_max.y += t_delta.y;
             last_axis = 1;
         } else {
             voxel.z += step.z;
-            t = t_max.z;
+            t += t_max.z;
             t_max.z += t_delta.z;
             last_axis = 2;
         }
@@ -138,7 +135,7 @@ fn fs_main(in: VertexOutput) -> GBuffer {
 
     let linear_z = length(hit_pos_ws - u_frame.cam_pos_ws);
     return GBuffer(
-        vec4<f32>(vec3<f32>(voxel % 2), 1.0),
+        albedo,
         vec4<f32>(hit_normal * 0.5 + 0.5, 1.0),
         u32(clamp(linear_z / 100.0, 0.0, 1.0) * 65535.0)
     );

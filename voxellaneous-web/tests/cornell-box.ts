@@ -4,7 +4,13 @@ import { Scene } from '../src/scene';
 function createUniformVoxelData([nx, ny, nz]: [number, number, number], paletteIndex: number): Uint8Array {
   const total = nx * ny * nz;
   const voxels = new Uint8Array(total);
-  voxels.fill(paletteIndex);
+  for (let z = 1; z < nz - 1; z++) {
+    for (let y = 1; y < ny - 1; y++) {
+      for (let x = 1; x < nx - 1; x++) {
+        voxels[x + nx * (y + ny * z)] = paletteIndex;
+      }
+    }
+  }
   return voxels;
 }
 
@@ -91,7 +97,7 @@ export function createCornellBoxScene(scene: Scene): void {
     scene,
     'ceiling',
     vec3.fromValues(100, 10, 80),
-    vec3.fromValues(0, 45, 0),
+    vec3.fromValues(0, 44, 0),
     createUniformVoxelData([100, 10, 80], 3),
   );
 
@@ -100,7 +106,7 @@ export function createCornellBoxScene(scene: Scene): void {
     scene,
     'back_wall',
     vec3.fromValues(100, 100, 10),
-    vec3.fromValues(0, 0, -45),
+    vec3.fromValues(0, 0, -44),
     createUniformVoxelData([100, 100, 10], 3),
   );
 

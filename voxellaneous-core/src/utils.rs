@@ -8,5 +8,5 @@ pub fn map_wgpu_err(e: impl std::fmt::Display) -> JsValue {
 }
 
 pub fn pack_rgba(rgba: &RGBA) -> u32 {
-    ((rgba.0 as u32) << 24) | ((rgba.1 as u32) << 16) | ((rgba.2 as u32) << 8) | (rgba.3 as u32)
+    ((rgba.3 as u32) << 24) | ((rgba.2 as u32) << 16) | ((rgba.1 as u32) << 8) | (rgba.0 as u32)
 }
